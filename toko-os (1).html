@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TOKO.OS — Sistem Kasir & Inventori</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-void:#05070d;
+    --bg-panel:#0c121e;
+    --bg-panel-2:#101929;
+    --line:rgba(34,211,238,0.14);
+    --line-strong:rgba(34,211,238,0.32);
+    --cyan:#22d3ee;
+    --cyan-dim:#0e7a90;
+    --violet:#a78bfa;
+    --amber:#fbbf24;
+    --green:#34d399;
+    --red:#fb7185;
+    --text:#e7f1ff;
+    --text-dim:#6f83a6;
+    --text-dimmer:#425068;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:var(--bg-void);
+    color:var(--text);
+    font-family:'Rajdhani',sans-serif;
+    font-weight:500;
+    min-height:100vh;
+    position:relative;
+    overflow-x:hidden;
+  }
+  /* ambient grid + scanline */
+  body::before{
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(rgba(34,211,238,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(34,211,238,0.05) 1px, transparent 1px);
+    background-size:42px 42px;
+    mask-image:radial-gradient(ellipse 90% 70% at 50% 0%, black 20%, transparent 75%);
+    pointer-events:none;
+    z-index:0;
+  }
+  body::after{
+    content:'';
+    position:fixed; inset:0;
+    background:linear-gradient(rgba(34,211,238,0.035) 50%, transparent 50%);
+    background-size:100% 4px;
+    pointer-events:none;
+    z-index:1;
+    animation:scan 9s linear infinite;
+  }
+  @keyframes scan{ from{background-position:0 0;} to{background-position:0 400px;} }
+
+  h1,h2,h3,.disp{ font-family:'Chakra Petch',sans-serif; letter-spacing:0.02em; }
+  .mono{ font-family:'JetBrains Mono',monospace; }
+
+  #app{ position:relative; z-index:2; max-width:1300px; margin:0 auto; padding:22px 22px 60px; }
+
+  /* ---------- header ---------- */
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding-bottom:18px; margin-bottom:22px;
+    border-bottom:1px solid var(--line);
+  }
+  .brand{ display:flex; align-items:center; gap:14px; }
+  .brand-mark{
+    width:44px;height:44px;border-radius:10px;
+    background:linear-gradient(135deg, rgba(34,211,238,0.18), rgba(167,139,250,0.12));
+    border:1px solid var(--line-strong);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 24px rgba(34,211,238,0.15) inset;
+  }
+  .brand-mark svg{ width:22px;height:22px; stroke:var(--cyan); }
+  .brand-name{ font-size:22px; font-weight:700; color:var(--text); }
+  .brand-name span{ color:var(--cyan); }
+  .brand-sub{ font-size:12px; color:var(--text-dim); letter-spacing:0.14em; text-transform:uppercase; margin-top:1px;}
+  .hud-right{ display:flex; align-items:center; gap:22px; }
+  .hud-clock{ text-align:right; }
+  .hud-clock .time{ font-size:18px; font-weight:600; color:var(--cyan); }
+  .hud-clock .date{ font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em; }
+  .status-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); margin-right:6px; animation:pulse 2s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+  .status-pill{ font-size:11px; text-transform:uppercase; letter-spacing:0.1em; color:var(--green); border:1px solid rgba(52,211,153,0.35); padding:6px 12px; border-radius:20px; background:rgba(52,211,153,0.06); }
+
+  /* ---------- layout ---------- */
+  .layout{ display:grid; grid-template-columns:210px 1fr; gap:22px; }
+  @media (max-width:840px){ .layout{ grid-template-columns:1fr; } nav.side{ order:2; } }
+
+  nav.side{ display:flex; flex-direction:column; gap:8px; }
+  .navbtn{
+    display:flex; align-items:center; gap:10px;
+    padding:13px 14px; border-radius:10px;
+    border:1px solid transparent; background:transparent;
+    color:var(--text-dim); font-family:'Rajdhani',sans-serif; font-weight:600; font-size:15px;
+    cursor:pointer; text-align:left; transition:all .15s ease; letter-spacing:0.02em;
+  }
+  .navbtn svg{ width:18px; height:18px; stroke:currentColor; flex-shrink:0; }
+  .navbtn:hover{ color:var(--text); background:rgba(34,211,238,0.05); }
+  .navbtn.active{
+    color:var(--cyan); background:rgba(34,211,238,0.09);
+    border-color:var(--line-strong);
+    box-shadow:0 0 18px rgba(34,211,238,0.08) inset;
+  }
+  .navbtn .tag{ margin-left:auto; font-size:10px; font-family:'JetBrains Mono',monospace; color:var(--text-dimmer); }
+
+  main{ min-width:0; }
+  .panel{
+    background:linear-gradient(180deg, var(--bg-panel), var(--bg-panel-2));
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:20px; backdrop-filter:blur(6px);
+  }
+  .panel + .panel{ margin-top:16px; }
+  .panel-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .panel-head h2{ font-size:16px; margin:0; color:var(--text); text-transform:uppercase; letter-spacing:0.08em; }
+  .eyebrow{ font-size:11px; color:var(--cyan-dim); text-transform:uppercase; letter-spacing:0.14em; margin-bottom:4px; }
+
+  /* ---------- product grid (kasir) ---------- */
+  .grid-2{ display:grid; grid-template-columns:1.5fr 1fr; gap:16px; align-items:start; }
+  @media (max-width:980px){ .grid-2{ grid-template-columns:1fr; } }
+  .prod-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:12px; }
+  .prod-card{
+    border:1px solid var(--line); border-radius:12px; padding:14px;
+    background:rgba(255,255,255,0.015); cursor:pointer; transition:.15s ease;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .prod-card:hover{ border-color:var(--line-strong); background:rgba(34,211,238,0.04); transform:translateY(-2px); }
+  .prod-card.out{ opacity:0.4; cursor:not-allowed; }
+  .prod-card.out:hover{ transform:none; }
+  .prod-name{ font-weight:700; font-size:15px; color:var(--text); }
+  .prod-price{ font-size:14px; }
+  .prod-price .now{ color:var(--cyan); font-weight:600; }
+  .prod-price .old{ color:var(--text-dimmer); text-decoration:line-through; font-size:11px; margin-left:5px; }
+  .stockbar-wrap{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-dim); }
+  .stockbar{ flex:1; height:5px; border-radius:3px; background:rgba(255,255,255,0.06); overflow:hidden; }
+  .stockbar i{ display:block; height:100%; border-radius:3px; }
+  .addbtn{
+    margin-top:2px; border:1px solid var(--line-strong); background:rgba(34,211,238,0.08);
+    color:var(--cyan); font-family:'JetBrains Mono',monospace; font-size:12px; padding:6px; border-radius:7px;
+    text-align:center; text-transform:uppercase; letter-spacing:0.08em;
+  }
+  .prod-card.out .addbtn{ color:var(--text-dimmer); border-color:var(--line); background:transparent; }
+
+  /* ---------- cart / terminal ---------- */
+  .terminal{
+    border:1px solid var(--line-strong); border-radius:12px; padding:16px;
+    background:#070b13; font-family:'JetBrains Mono',monospace;
+  }
+  .member-row{ display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:12px; }
+  .toggle{
+    width:38px; height:20px; border-radius:12px; border:1px solid var(--line-strong);
+    background:rgba(255,255,255,0.04); position:relative; cursor:pointer; flex-shrink:0;
+  }
+  .toggle i{ position:absolute; top:1px; left:1px; width:16px; height:16px; border-radius:50%; background:var(--text-dimmer); transition:.15s; }
+  .toggle.on{ background:rgba(167,139,250,0.18); border-color:var(--violet); }
+  .toggle.on i{ left:19px; background:var(--violet); box-shadow:0 0 8px var(--violet); }
+  .member-fields{ display:flex; gap:6px; margin-bottom:10px; }
+  .member-fields input{ flex:1; }
+
+  .cart-line{ display:flex; justify-content:space-between; align-items:center; font-size:12.5px; padding:7px 0; border-bottom:1px dashed rgba(255,255,255,0.06); gap:8px; }
+  .cart-line .nm{ color:var(--text); flex:1; }
+  .qtybox{ display:flex; align-items:center; gap:6px; }
+  .qtybox button{ width:20px;height:20px; border-radius:5px; border:1px solid var(--line); background:transparent; color:var(--cyan); cursor:pointer; font-family:monospace; }
+  .cart-empty{ color:var(--text-dimmer); font-size:12px; text-align:center; padding:20px 0; }
+  .cart-total{ display:flex; justify-content:space-between; margin-top:12px; padding-top:12px; border-top:1px solid var(--line-strong); font-size:15px; color:var(--cyan); font-weight:600; }
+
+  input, select{
+    background:#0a0f1a; border:1px solid var(--line); color:var(--text);
+    border-radius:7px; padding:8px 10px; font-family:'JetBrains Mono',monospace; font-size:12.5px; width:100%;
+  }
+  input:focus, select:focus{ outline:none; border-color:var(--cyan); }
+  label.f{ font-size:10.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; display:block; margin-bottom:5px; }
+
+  .btn{
+    font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:0.04em; text-transform:uppercase;
+    font-size:13px; padding:11px 16px; border-radius:9px; border:1px solid var(--line-strong);
+    background:rgba(34,211,238,0.1); color:var(--cyan); cursor:pointer; width:100%; transition:.15s;
+  }
+  .btn:hover{ background:rgba(34,211,238,0.2); }
+  .btn:disabled{ opacity:0.35; cursor:not-allowed; }
+  .btn.violet{ border-color:rgba(167,139,250,0.45); background:rgba(167,139,250,0.1); color:var(--violet); }
+  .btn.violet:hover{ background:rgba(167,139,250,0.2); }
+  .btn.ghost{ background:transparent; color:var(--text-dim); border-color:var(--line); }
+  .btn.amber{ border-color:rgba(251,191,36,0.45); background:rgba(251,191,36,0.1); color:var(--amber); }
+  .btn.amber:hover{ background:rgba(251,191,36,0.2); }
+  .pay-tabs{ display:flex; gap:8px; margin:12px 0; }
+  .pay-tabs button{ flex:1; padding:9px; font-size:11.5px; }
+  .pay-tabs button.sel{ background:rgba(34,211,238,0.2); color:var(--cyan); }
+
+  .receipt-line{ opacity:0; animation:typeIn .25s forwards; }
+  @keyframes typeIn{ from{ opacity:0; transform:translateY(3px);} to{ opacity:1; transform:translateY(0);} }
+  .banner{ padding:10px 12px; border-radius:8px; font-size:12px; margin-top:10px; }
+  .banner.ok{ background:rgba(52,211,153,0.1); border:1px solid rgba(52,211,153,0.35); color:var(--green); }
+  .banner.warn{ background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.35); color:var(--amber); }
+
+  /* ---------- tables ---------- */
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); padding:8px 10px; border-bottom:1px solid var(--line-strong); }
+  td{ padding:9px 10px; border-bottom:1px solid var(--line); color:var(--text); vertical-align:middle; }
+  tr:hover td{ background:rgba(34,211,238,0.03); }
+  .badge{ font-size:10.5px; padding:3px 9px; border-radius:20px; font-family:'JetBrains Mono',monospace; text-transform:uppercase; letter-spacing:0.05em; }
+  .badge.sell{ background:rgba(52,211,153,0.12); color:var(--green); border:1px solid rgba(52,211,153,0.3); }
+  .badge.rusak{ background:rgba(251,191,36,0.12); color:var(--amber); border:1px solid rgba(251,191,36,0.3); }
+  .badge.hilang{ background:rgba(251,113,133,0.12); color:var(--red); border:1px solid rgba(251,113,133,0.3); }
+  .badge.restock{ background:rgba(34,211,238,0.12); color:var(--cyan); border:1px solid rgba(34,211,238,0.3); }
+
+  .form-row{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; align-items:end; margin-bottom:14px; }
+  .mini{ display:flex; gap:8px; align-items:center;}
+  .mini button{ padding:8px 10px; font-size:11px; width:auto; }
+
+  /* ---------- report ---------- */
+  .kpi-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:16px; }
+  .kpi{ border:1px solid var(--line); border-radius:10px; padding:14px; background:rgba(255,255,255,0.015); }
+  .kpi .label{ font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); margin-bottom:6px; }
+  .kpi .val{ font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:600; }
+  .kpi.pos .val{ color:var(--green); }
+  .kpi.neg .val{ color:var(--red); }
+  .kpi.neutral .val{ color:var(--cyan); }
+  .flowline{ display:flex; justify-content:space-between; font-size:13px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .flowline.sum{ border-top:1px solid var(--line-strong); border-bottom:none; margin-top:6px; padding-top:12px; font-weight:700; font-size:16px; }
+  .flowline .l{ color:var(--text-dim); }
+  .flowline .v{ font-family:'JetBrains Mono',monospace; }
+
+  .empty{ text-align:center; padding:30px 10px; color:var(--text-dimmer); font-size:13px; }
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line-strong); border-radius:4px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18l-1.5 11a2 2 0 0 1-2 1.7H6.5a2 2 0 0 1-2-1.7L3 7Z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">TOKO<span>.OS</span></div>
+        <div class="brand-sub">Sistem Kasir &amp; Inventori</div>
+      </div>
+    </div>
+    <div class="hud-right">
+      <span class="status-pill"><span class="status-dot"></span>Sistem Aktif</span>
+      <div class="hud-clock">
+        <div class="time" id="clockTime">--:--:--</div>
+        <div class="date" id="clockDate">-</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="side" id="navSide"></nav>
+    <main id="mainView"></main>
+  </div>
+
+</div>
+
+<script>
+/* =========================================================================
+   TOKO.OS — state & logic
+   Struktur file sengaja dibuat flat & modular per fitur supaya gampang
+   dirawat: 1 objek `state`, fungsi render per-tab, fungsi aksi per-fitur.
+   Mau nambah menu baru? tinggal: (1) tambah item di CONFIG.TABS,
+   (2) tambah case di render(), (3) tambah fungsi aksinya sendiri.
+   ========================================================================= */
+
+const CONFIG = {
+  PAJAK_PERSEN: 0.10,        // pajak atas keuntungan kotor
+  DISKON_JUAL: 0.10,         // diskon otomatis kalau hargaJual > hargaAsli
+  MEMBER_BONUS_MIN: 50000,   // minimal belanja member biar dapat bonus
+  MEMBER_BONUS_LABEL: 'Gratis Totebag & Parkir',
+  MEMBER_BONUS_BIAYA: 5000,
+  TABS: [
+    { id:'kasir',   label:'Kasir',        tag:'F1', icon:'cart' },
+    { id:'restock', label:'Barang Masuk', tag:'F2', icon:'box' },
+    { id:'rugi',    label:'Barang Keluar',tag:'F3', icon:'alert' },
+    { id:'laporan', label:'Laporan',      tag:'F4', icon:'chart' },
+  ]
+};
+
+const ICONS = {
+  cart: '<path d="M3 3h2l2.6 12.4a2 2 0 0 0 2 1.6h8.8a2 2 0 0 0 2-1.6L22 8H6"/><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/>',
+  box: '<path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v9l9 5 9-5V8"/><path d="M12 13v9"/>',
+  alert: '<path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
+  chart: '<path d="M4 20V10"/><path d="M11 20V4"/><path d="M18 20v-7"/><path d="M2 20h20"/>',
+};
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+function rupiah(n){ return 'Rp ' + Math.round(n).toLocaleString('id-ID'); }
+
+const state = {
+  activeTab: 'kasir',
+  products: [
+    { id:uid(), nama:'Buku Tulis',   hargaAsli:10000, hargaJual:15000, stok:50 },
+    { id:uid(), nama:'Pena Gel',     hargaAsli:6000,  hargaJual:8000,  stok:30 },
+    { id:uid(), nama:'Tas Sekolah',  hargaAsli:80000, hargaJual:110000,stok:15 },
+    { id:uid(), nama:'Kotak Pensil', hargaAsli:12000, hargaJual:12000, stok:20 },
+  ],
+  cart: [],                 // { productId, qty }
+  member: { active:false, id:'' },
+  payMethod: 'tunai',       // 'tunai' | 'qris'
+  uangTunai: '',
+  lastReceipt: null,        // hasil transaksi terakhir buat ditampilkan
+  logs: [],                 // riwayat: { id, waktu, nama, jumlah, tipe, alasan, nilai }
+  finance: { pendapatan:0, modal:0, biayaBonus:0, kerugian:0 },
+};
+
+/* ---------------- harga & diskon ---------------- */
+function hargaFinal(p){
+  // diskon otomatis kalau harga jual di-mark up dari harga modal
+  if (p.hargaJual > p.hargaAsli) return p.hargaJual * (1 - CONFIG.DISKON_JUAL);
+  return p.hargaJual;
+}
+function getProduct(id){ return state.products.find(p => p.id === id); }
+function cartTotals(){
+  let totalJual = 0, totalModal = 0;
+  state.cart.forEach(line => {
+    const p = getProduct(line.productId);
+    if (!p) return;
+    totalJual  += hargaFinal(p) * line.qty;
+    totalModal += p.hargaAsli * line.qty;
+  });
+  return { totalJual, totalModal };
+}
+function eligibleForBonus(totalJual){
+  return state.member.active && totalJual >= CONFIG.MEMBER_BONUS_MIN;
+}
+
+/* ---------------- aksi: kasir ---------------- */
+function addToCart(id){
+  const p = getProduct(id);
+  if (!p || p.stok <= 0) return;
+  const line = state.cart.find(l => l.productId === id);
+  const qtyInCart = line ? line.qty : 0;
+  if (qtyInCart + 1 > p.stok) return;
+  if (line) line.qty++; else state.cart.push({ productId:id, qty:1 });
+  render();
+}
+function changeQty(id, delta){
+  const line = state.cart.find(l => l.productId === id);
+  if (!line) return;
+  const p = getProduct(id);
+  const next = line.qty + delta;
+  if (next <= 0){ state.cart = state.cart.filter(l => l.productId !== id); }
+  else if (next <= p.stok){ line.qty = next; }
+  render();
+}
+function toggleMember(){
+  state.member.active = !state.member.active;
+  render();
+}
+function setPayMethod(m){ state.payMethod = m; render(); }
+
+function checkout(){
+  if (state.cart.length === 0) return;
+  const { totalJual, totalModal } = cartTotals();
+
+  if (state.payMethod === 'tunai'){
+    const dibayar = parseFloat(state.uangTunai || 0);
+    if (isNaN(dibayar) || dibayar < totalJual){
+      state.lastReceipt = { error:'Uang tunai kurang dari total belanja.' };
+      render();
+      return;
+    }
+  }
+
+  const bonus = eligibleForBonus(totalJual);
+
+  // kurangi stok & catat log per item
+  state.cart.forEach(line => {
+    const p = getProduct(line.productId);
+    p.stok -= line.qty;
+    state.logs.unshift({
+      id:uid(), waktu:new Date(), nama:p.nama, jumlah:line.qty,
+      tipe:'sell', alasan:'Terjual', nilai: hargaFinal(p) * line.qty
+    });
+  });
+
+  state.finance.pendapatan += totalJual;
+  state.finance.modal += totalModal;
+  if (bonus) state.finance.biayaBonus += CONFIG.MEMBER_BONUS_BIAYA;
+
+  const dibayar = state.payMethod === 'tunai' ? parseFloat(state.uangTunai || 0) : totalJual;
+  state.lastReceipt = {
+    items: state.cart.map(l => ({ nama:getProduct(l.productId)?.nama || l.productId, qty:l.qty })),
+    totalJual, bonus, metode: state.payMethod,
+    kembalian: state.payMethod === 'tunai' ? dibayar - totalJual : 0,
+  };
+
+  state.cart = [];
+  state.uangTunai = '';
+  state.member = { active:false, id:'' };
+  render();
+}
+
+/* ---------------- aksi: restock ---------------- */
+function doRestock(id, qty){
+  const p = getProduct(id);
+  if (!p || !qty || qty <= 0) return;
+  p.stok += qty;
+  state.logs.unshift({ id:uid(), waktu:new Date(), nama:p.nama, jumlah:qty, tipe:'restock', alasan:'Restock', nilai:0 });
+  render();
+}
+function addNewProduct(nama, hargaAsli, hargaJual, stok){
+  if (!nama || hargaAsli <= 0) return;
+  state.products.push({ id:uid(), nama, hargaAsli, hargaJual: hargaJual || hargaAsli, stok: stok || 0 });
+  render();
+}
+
+/* ---------------- aksi: barang keluar non-jual ---------------- */
+function recordLoss(id, qty, alasan){
+  const p = getProduct(id);
+  if (!p || !qty || qty <= 0 || qty > p.stok) return;
+  p.stok -= qty;
+  const kerugian = p.hargaAsli * qty;
+  state.finance.kerugian += kerugian;
+  state.logs.unshift({ id:uid(), waktu:new Date(), nama:p.nama, jumlah:qty, tipe: alasan==='Rusak'?'rusak':'hilang', alasan, nilai:kerugian });
+  render();
+}
+
+/* ---------------- laporan ---------------- */
+function reportNumbers(){
+  const { pendapatan, modal, biayaBonus, kerugian } = state.finance;
+  const kotor = pendapatan - modal;
+  const pajak = Math.max(0, kotor * CONFIG.PAJAK_PERSEN);
+  const bersih = kotor - pajak - biayaBonus - kerugian;
+  return { pendapatan, modal, kotor, pajak, biayaBonus, kerugian, bersih };
+}
+
+/* =========================================================================
+   RENDER
+   ========================================================================= */
+function render(){
+  renderNav();
+  const view = document.getElementById('mainView');
+  view.innerHTML = '';
+  if (state.activeTab === 'kasir') view.appendChild(renderKasir());
+  if (state.activeTab === 'restock') view.appendChild(renderRestock());
+  if (state.activeTab === 'rugi') view.appendChild(renderRugi());
+  if (state.activeTab === 'laporan') view.appendChild(renderLaporan());
+}
+
+function renderNav(){
+  const nav = document.getElementById('navSide');
+  nav.innerHTML = '';
+  CONFIG.TABS.forEach(t => {
+    const btn = document.createElement('button');
+    btn.className = 'navbtn' + (state.activeTab === t.id ? ' active' : '');
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICONS[t.icon]}</svg><span>${t.label}</span><span class="tag">${t.tag}</span>`;
+    btn.onclick = () => { state.activeTab = t.id; state.lastReceipt = null; render(); };
+    nav.appendChild(btn);
+  });
+}
+
+function stockColor(p){
+  const ratio = p.stok / Math.max(1, p._maxSeen || p.stok || 1);
+  if (p.stok === 0) return 'var(--red)';
+  if (p.stok < 10) return 'var(--amber)';
+  return 'var(--green)';
+}
+
+function renderKasir(){
+  const wrap = document.createElement('div');
+  wrap.className = 'grid-2';
+
+  // --- kolom produk ---
+  const left = document.createElement('div');
+  left.className = 'panel';
+  const { totalJual } = cartTotals();
+  left.innerHTML = `<div class="panel-head"><h2>Daftar Barang</h2><span class="eyebrow">${state.products.length} SKU</span></div>`;
+  const grid = document.createElement('div');
+  grid.className = 'prod-grid';
+  state.products.forEach(p => {
+    const inCart = state.cart.find(l => l.productId === p.id)?.qty || 0;
+    const out = p.stok - inCart <= 0;
+    const card = document.createElement('div');
+    card.className = 'prod-card' + (out ? ' out' : '');
+    const pct = Math.min(100, (p.stok / 50) * 100);
+    const disc = p.hargaJual > p.hargaAsli;
+    card.innerHTML = `
+      <div class="prod-name">${p.nama}</div>
+      <div class="prod-price"><span class="now">${rupiah(hargaFinal(p))}</span>${disc?`<span class="old">${rupiah(p.hargaJual)}</span>`:''}</div>
+      <div class="stockbar-wrap"><span>${p.stok} pcs</span><div class="stockbar"><i style="width:${pct}%; background:${p.stok===0?'var(--red)': p.stok<10?'var(--amber)':'var(--green)'}"></i></div></div>
+      <div class="addbtn">${out ? 'Stok Habis' : '+ Tambah Keranjang'}</div>
+    `;
+    if (!out) card.onclick = () => addToCart(p.id);
+    grid.appendChild(card);
+  });
+  left.appendChild(grid);
+
+  // --- kolom kasir / terminal ---
+  const right = document.createElement('div');
+  right.className = 'panel';
+  right.innerHTML = `<div class="panel-head"><h2>Terminal Kasir</h2></div>`;
+
+  const term = document.createElement('div');
+  term.className = 'terminal';
+
+  const memberRow = document.createElement('div');
+  memberRow.className = 'member-row';
+  memberRow.innerHTML = `<div class="toggle ${state.member.active?'on':''}"><i></i></div><span>Pelanggan Member</span>`;
+  memberRow.querySelector('.toggle').onclick = toggleMember;
+  term.appendChild(memberRow);
+
+  if (state.member.active){
+    const mf = document.createElement('div');
+    mf.className = 'member-fields';
+    mf.innerHTML = `<input placeholder="ID Member" value="${state.member.id}" id="memberIdInput">`;
+    mf.querySelector('input').oninput = (e) => { state.member.id = e.target.value; };
+    term.appendChild(mf);
+  }
+
+  const cartBox = document.createElement('div');
+  if (state.cart.length === 0){
+    cartBox.innerHTML = `<div class="cart-empty">// keranjang kosong — pilih barang di sebelah kiri</div>`;
+  } else {
+    state.cart.forEach(line => {
+      const p = getProduct(line.productId);
+      const row = document.createElement('div');
+      row.className = 'cart-line';
+      row.innerHTML = `
+        <span class="nm">${p.nama}</span>
+        <div class="qtybox">
+          <button data-d="-1">–</button>
+          <span>${line.qty}</span>
+          <button data-d="1">+</button>
+        </div>
+        <span>${rupiah(hargaFinal(p)*line.qty)}</span>
+      `;
+      row.querySelectorAll('button').forEach(b => b.onclick = () => changeQty(p.id, parseInt(b.dataset.d)));
+      cartBox.appendChild(row);
+    });
+  }
+  term.appendChild(cartBox);
+
+  const totalRow = document.createElement('div');
+  totalRow.className = 'cart-total';
+  totalRow.innerHTML = `<span>TOTAL</span><span>${rupiah(totalJual)}</span>`;
+  term.appendChild(totalRow);
+
+  if (eligibleForBonus(totalJual)){
+    const b = document.createElement('div');
+    b.className = 'banner ok';
+    b.textContent = `✓ Member bonus aktif: ${CONFIG.MEMBER_BONUS_LABEL}`;
+    term.appendChild(b);
+  }
+
+  // metode bayar
+  const payTabs = document.createElement('div');
+  payTabs.className = 'pay-tabs';
+  payTabs.innerHTML = `
+    <button class="${state.payMethod==='tunai'?'sel':''}" data-m="tunai">Tunai</button>
+    <button class="${state.payMethod==='qris'?'sel':''}" data-m="qris">QRIS</button>
+  `;
+  payTabs.querySelectorAll('button').forEach(b => b.onclick = () => setPayMethod(b.dataset.m));
+  term.appendChild(payTabs);
+
+  if (state.payMethod === 'tunai'){
+    const cashField = document.createElement('div');
+    cashField.style.marginBottom = '12px';
+    cashField.innerHTML = `<label class="f">Uang Tunai Diterima</label><input type="number" min="0" placeholder="0" value="${state.uangTunai}">`;
+    cashField.querySelector('input').oninput = (e) => { state.uangTunai = e.target.value; };
+    term.appendChild(cashField);
+  } else {
+    const qrisBox = document.createElement('div');
+    qrisBox.className = 'banner ok';
+    qrisBox.style.textAlign = 'center';
+    qrisBox.innerHTML = `▦▦▦ Scan QRIS di EDC untuk membayar ${rupiah(totalJual)}`;
+    term.appendChild(qrisBox);
+  }
+
+  const payBtn = document.createElement('button');
+  payBtn.className = 'btn';
+  payBtn.textContent = state.cart.length ? `Proses Pembayaran — ${rupiah(totalJual)}` : 'Keranjang Kosong';
+  payBtn.disabled = state.cart.length === 0;
+  payBtn.onclick = checkout;
+  term.appendChild(payBtn);
+
+  if (state.lastReceipt){
+    const r = state.lastReceipt;
+    const rec = document.createElement('div');
+    rec.style.marginTop = '14px';
+    if (r.error){
+      rec.innerHTML = `<div class="banner warn">⚠ ${r.error}</div>`;
+    } else {
+      rec.innerHTML = `
+        <div class="eyebrow" style="margin-top:14px;">Struk Terakhir</div>
+        <div class="terminal" style="margin-top:6px;">
+          ${r.items.map((it,i)=>`<div class="receipt-line" style="animation-delay:${i*0.05}s">${it.nama} × ${it.qty}</div>`).join('')}
+          <div class="receipt-line" style="animation-delay:.2s; border-top:1px dashed rgba(255,255,255,0.08); margin-top:6px; padding-top:6px;">TOTAL: ${rupiah(r.totalJual)}</div>
+          <div class="receipt-line" style="animation-delay:.25s">METODE: ${r.metode.toUpperCase()}</div>
+          ${r.metode==='tunai' ? `<div class="receipt-line" style="animation-delay:.3s">KEMBALIAN: ${rupiah(r.kembalian)}</div>` : ''}
+          ${r.bonus ? `<div class="receipt-line" style="animation-delay:.35s; color:var(--violet);">+ BONUS: ${CONFIG.MEMBER_BONUS_LABEL}</div>` : ''}
+        </div>
+      `;
+    }
+    term.appendChild(rec);
+  }
+
+  right.appendChild(term);
+  wrap.appendChild(left);
+  wrap.appendChild(right);
+  return wrap;
+}
+
+function renderRestock(){
+  const panel = document.createElement('div');
+  panel.className = 'panel';
+  panel.innerHTML = `<div class="panel-head"><h2>Barang Masuk (Restock)</h2></div>`;
+
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr><th>Produk</th><th>Modal</th><th>Harga Jual</th><th>Stok</th><th>Tambah</th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+  state.products.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${p.nama}</td>
+      <td class="mono">${rupiah(p.hargaAsli)}</td>
+      <td class="mono">${rupiah(p.hargaJual)}</td>
+      <td class="mono">${p.stok}</td>
+      <td>
+        <div class="mini">
+          <input type="number" min="1" placeholder="qty" style="width:80px" id="rq-${p.id}">
+          <button class="btn ghost">+ Stok</button>
+        </div>
+      </td>
+    `;
+    tr.querySelector('button').onclick = () => {
+      const input = tr.querySelector(`#rq-${p.id}`);
+      doRestock(p.id, parseInt(input.value));
+    };
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  panel.appendChild(table);
+
+  // form produk baru
+  const addPanel = document.createElement('div');
+  addPanel.className = 'panel';
+  addPanel.innerHTML = `<div class="panel-head"><h2>+ Produk Baru</h2></div>`;
+  const row = document.createElement('div');
+  row.className = 'form-row';
+  row.innerHTML = `
+    <div><label class="f">Nama Produk</label><input id="npNama" placeholder="cth: Spidol"></div>
+    <div><label class="f">Harga Modal</label><input id="npModal" type="number" min="0" placeholder="0"></div>
+    <div><label class="f">Harga Jual</label><input id="npJual" type="number" min="0" placeholder="0"></div>
+    <div><label class="f">Stok Awal</label><input id="npStok" type="number" min="0" placeholder="0"></div>
+  `;
+  addPanel.appendChild(row);
+  const addBtn = document.createElement('button');
+  addBtn.className = 'btn violet';
+  addBtn.textContent = 'Tambahkan ke Katalog';
+  addBtn.onclick = () => {
+    addNewProduct(
+      document.getElementById('npNama').value.trim(),
+      parseFloat(document.getElementById('npModal').value) || 0,
+      parseFloat(document.getElementById('npJual').value) || 0,
+      parseInt(document.getElementById('npStok').value) || 0
+    );
+  };
+  addPanel.appendChild(addBtn);
+
+  const outer = document.createElement('div');
+  outer.appendChild(panel);
+  outer.appendChild(addPanel);
+  return outer;
+}
+
+function renderRugi(){
+  const panel = document.createElement('div');
+  panel.className = 'panel';
+  panel.innerHTML = `<div class="panel-head"><h2>Catat Barang Keluar (Non-Penjualan)</h2></div>`;
+
+  const row = document.createElement('div');
+  row.className = 'form-row';
+  row.innerHTML = `
+    <div><label class="f">Produk</label>
+      <select id="lossProduct">${state.products.map(p=>`<option value="${p.id}">${p.nama} (stok ${p.stok})</option>`).join('')}</select>
+    </div>
+    <div><label class="f">Jumlah</label><input id="lossQty" type="number" min="1" placeholder="0"></div>
+    <div><label class="f">Alasan</label>
+      <select id="lossReason"><option value="Rusak">Rusak</option><option value="Hilang">Hilang / Menyusut</option></select>
+    </div>
+  `;
+  panel.appendChild(row);
+  const btn = document.createElement('button');
+  btn.className = 'btn amber';
+  btn.textContent = 'Catat Barang Keluar';
+  btn.onclick = () => {
+    recordLoss(document.getElementById('lossProduct').value, parseInt(document.getElementById('lossQty').value), document.getElementById('lossReason').value);
+  };
+  panel.appendChild(btn);
+  return panel;
+}
+
+function renderLaporan(){
+  const outer = document.createElement('div');
+
+  const kpiPanel = document.createElement('div');
+  kpiPanel.className = 'panel';
+  kpiPanel.innerHTML = `<div class="panel-head"><h2>Rekapitulasi Toko</h2></div>`;
+  const n = reportNumbers();
+  const kpis = document.createElement('div');
+  kpis.className = 'kpi-grid';
+  kpis.innerHTML = `
+    <div class="kpi neutral"><div class="label">Pendapatan</div><div class="val">${rupiah(n.pendapatan)}</div></div>
+    <div class="kpi neutral"><div class="label">Modal Terjual</div><div class="val">${rupiah(n.modal)}</div></div>
+    <div class="kpi ${n.kotor>=0?'pos':'neg'}"><div class="label">Untung Kotor</div><div class="val">${rupiah(n.kotor)}</div></div>
+    <div class="kpi neg"><div class="label">Kerugian Rusak/Hilang</div><div class="val">${rupiah(n.kerugian)}</div></div>
+    <div class="kpi ${n.bersih>=0?'pos':'neg'}"><div class="label">Untung Bersih</div><div class="val">${rupiah(n.bersih)}</div></div>
+  `;
+  kpiPanel.appendChild(kpis);
+
+  const flow = document.createElement('div');
+  flow.innerHTML = `
+    <div class="flowline"><span class="l">Pendapatan (Omset)</span><span class="v">${rupiah(n.pendapatan)}</span></div>
+    <div class="flowline"><span class="l">Modal Barang Terjual</span><span class="v">– ${rupiah(n.modal)}</span></div>
+    <div class="flowline"><span class="l">Untung Kotor</span><span class="v">${rupiah(n.kotor)}</span></div>
+    <div class="flowline"><span class="l">Pajak (${(CONFIG.PAJAK_PERSEN*100).toFixed(0)}%)</span><span class="v">– ${rupiah(n.pajak)}</span></div>
+    <div class="flowline"><span class="l">Biaya Bonus Member</span><span class="v">– ${rupiah(n.biayaBonus)}</span></div>
+    <div class="flowline"><span class="l">Kerugian Rusak/Hilang</span><span class="v">– ${rupiah(n.kerugian)}</span></div>
+    <div class="flowline sum"><span class="l">Untung Bersih Akhir</span><span class="v">${rupiah(n.bersih)}</span></div>
+  `;
+  kpiPanel.appendChild(flow);
+  outer.appendChild(kpiPanel);
+
+  const logPanel = document.createElement('div');
+  logPanel.className = 'panel';
+  logPanel.innerHTML = `<div class="panel-head"><h2>Riwayat Barang Keluar/Masuk</h2><span class="eyebrow">${state.logs.length} transaksi</span></div>`;
+  if (state.logs.length === 0){
+    logPanel.innerHTML += `<div class="empty">Belum ada aktivitas tercatat hari ini.</div>`;
+  } else {
+    const table = document.createElement('table');
+    table.innerHTML = `<thead><tr><th>Waktu</th><th>Barang</th><th>Qty</th><th>Status</th><th>Nilai</th></tr></thead>`;
+    const tbody = document.createElement('tbody');
+    state.logs.forEach(l => {
+      const tr = document.createElement('tr');
+      const badgeClass = l.tipe === 'sell' ? 'sell' : l.tipe === 'restock' ? 'restock' : l.tipe === 'rusak' ? 'rusak' : 'hilang';
+      tr.innerHTML = `
+        <td class="mono">${l.waktu.toLocaleTimeString('id-ID')}</td>
+        <td>${l.nama}</td>
+        <td class="mono">${l.jumlah}</td>
+        <td><span class="badge ${badgeClass}">${l.alasan}</span></td>
+        <td class="mono">${l.tipe==='restock' ? '—' : rupiah(l.nilai)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    logPanel.appendChild(table);
+  }
+  outer.appendChild(logPanel);
+
+  return outer;
+}
+
+/* ---------------- clock ---------------- */
+function tickClock(){
+  const now = new Date();
+  document.getElementById('clockTime').textContent = now.toLocaleTimeString('id-ID');
+  document.getElementById('clockDate').textContent = now.toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+render();
+</script>
+</body>
+</html>
